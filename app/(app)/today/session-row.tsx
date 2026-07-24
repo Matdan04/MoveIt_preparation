@@ -10,13 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
   markAttendedAction,
@@ -82,8 +82,8 @@ export function SessionRow({ session }: { session: SessionRowData }) {
   }
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
         <button
           type="button"
           className={cn(
@@ -102,16 +102,16 @@ export function SessionRow({ session }: { session: SessionRowData }) {
           </span>
           <StatusBadge status={session.status} />
         </button>
-      </SheetTrigger>
+      </DialogTrigger>
 
-      <SheetContent side="bottom" className="mx-auto max-w-lg">
-        <SheetHeader>
-          <SheetTitle>{session.clientName}</SheetTitle>
-          <SheetDescription>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{session.clientName}</DialogTitle>
+          <DialogDescription>
             <span className="font-mono tabular-nums">{session.timeLabel}</span> ·{" "}
             {session.durationMin} min
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
 
         <div className="space-y-4 p-4">
           {scheduled ? (
@@ -177,7 +177,7 @@ export function SessionRow({ session }: { session: SessionRowData }) {
             ) : null}
           </div>
         </div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
