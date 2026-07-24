@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import { config } from "dotenv";
 
@@ -11,6 +12,11 @@ if (!process.env.TEST_DATABASE_URL) {
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL(".", import.meta.url)),
+    },
+  },
   test: {
     // Suite runs against the real Postgres test database, not a mock.
     setupFiles: ["./tests/setup.ts"],
