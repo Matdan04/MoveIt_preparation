@@ -1,0 +1,24 @@
+services:
+  db:
+    image: postgres:16
+    container_name: move_ops_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: move
+      POSTGRES_PASSWORD: move
+      POSTGRES_DB: move
+    ports:
+      - "5432:5432"
+    volumes:
+      - move_pgdata:/var/lib/postgresql/data
+      # Runs once on an empty data volume: creates the separate test database
+      # so Vitest never shares state with the dev database.
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U move -d move"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  move_pgdata:

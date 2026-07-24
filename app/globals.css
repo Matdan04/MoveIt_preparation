@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+/* One accent colour and the system font stack, per CLAUDE.md styling rules. */
+@theme {
+  --color-accent: oklch(0.62 0.15 250);
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+}
+
+body {
+  font-family: var(--font-sans);
+}

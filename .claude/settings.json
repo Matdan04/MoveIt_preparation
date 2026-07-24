@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm --version)",
+      "Bash(docker --version)",
+      "Bash(pnpm install *)",
+      "Bash(pnpm prisma *)",
+      "Bash(pnpm typecheck *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(docker compose *)",
+      "Bash(docker exec *)",
+      "Bash(break)"
+    ]
+  }
+}
