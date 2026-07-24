@@ -13,6 +13,7 @@ import {
   reconcileBookings,
   reconcilePackages,
 } from "../lib/import/reconcile-refs";
+import { commitImport } from "../lib/import/commit";
 
 // The importer is a CLI script, NOT a Server Action, on purpose. Parsing three
 // files, staging them and reconciling against the whole live book is long,
@@ -28,10 +29,18 @@ import {
 const SOURCE_SYSTEM = "legacy-booking-tool";
 
 async function main() {
-  const dir = process.argv[2] ?? "sample_vendor_export";
+  const args = process.argv.slice(2);
+  // Committing is opt-in: --dry-run is the default, so a bare `pnpm run import`
+  // only ever produces a report. Writing to live tables requires --commit.
+  const doCommit = args.includes("--commit");
+  const dir = args.find((a) => !a.startsWith("--")) ?? "sample_vendor_export";
   const read = (f: string) => readFileSync(join(dir, f), "utf8");
 
-  console.log(`Import from ${dir} (source: ${SOURCE_SYSTEM})\n`);
+  console.log(
+    `Import from ${dir} (source: ${SOURCE_SYSTEM})` +
+      (doCommit ? " [COMMIT]" : " [dry run]") +
+      "\n",
+  );
 
   // --- Phase 1: stage ----------------------------------------------------
   const batchId = await createBatch(SOURCE_SYSTEM);
@@ -89,10 +98,40 @@ async function main() {
   console.log(`  Parse errors: ${packages.parseErrors.length}`);
   for (const i of packages.parseErrors) console.log(`    [${i.sourceRowId}] ${i.reason}`);
 
+  if (!doCommit) {
+    console.log(
+      "\nPhase 2 complete. Nothing above ambiguity was merged and no live data was written.",
+    );
+    console.log("Re-run with --commit to apply the exact matches and new clients.");
+    return;
+  }
+
+  // --- Phase 3: commit ---------------------------------------------------
+  // Applies only the unambiguous outcomes (exact matches, new clients).
+  // Probable matches and conflicts stay pending a human decision.
+  const manager = await prisma.user.findFirstOrThrow({
+    where: { role: "MANAGER" },
+  });
+  const summary = await commitImport({
+    batchId,
+    sourceSystem: SOURCE_SYSTEM,
+    report: clients,
+    actorUserId: manager.id,
+  });
+
+  console.log("\nCOMMIT");
+  console.log(`  Clients created: ${summary.clientsCreated}`);
+  console.log(`  Packages created: ${summary.packagesCreated}`);
+  console.log(`  Sessions created: ${summary.sessionsCreated}`);
+  console.log(`  Duplicate sessions folded: ${summary.sessionsFolded}`);
+  console.log(`  Bookings skipped (unresolved): ${summary.skippedBookings}`);
+  console.log(`  Packages skipped (unresolved): ${summary.skippedPackages}`);
   console.log(
-    "\nPhase 2 complete. Nothing above ambiguity was merged and no live data was written.",
+    "\nCommit complete. Re-running this export will change nothing (idempotent).",
   );
-  console.log("Review the buckets above; commit (phase 3) is a separate, explicit step.");
+  console.log(
+    `Probable matches (${clients.probableMatches.length}) and conflicts (${clients.conflicts.length}) were NOT applied — they await a human decision.`,
+  );
 }
 
 main()

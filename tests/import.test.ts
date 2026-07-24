@@ -19,6 +19,11 @@ import type {
   ClientMatch,
   ClientConflict,
 } from "@/lib/import/reconcile";
+import { commitImport } from "@/lib/import/commit";
+import { computeDiscrepancies } from "@/lib/import/parallel-check";
+import { getBalance } from "@/lib/services/credits";
+
+const SOURCE = "legacy-booking-tool";
 
 // Phases 1 and 2 of the vendor import, exercised against the REAL dirty fixture
 // files in sample_vendor_export/. The point of these tests is to pin specific
@@ -49,6 +54,15 @@ async function seedLiveBook() {
     await prisma.client.create({ data: { name, phone } });
   }
 
+  // The package catalogue the importer keys onto by session count.
+  await prisma.package.createMany({
+    data: [
+      { name: "Trial 3-Pack", sessionCount: 3, priceSen: 45_000, validityDays: 30 },
+      { name: "PT 10-Pack", sessionCount: 10, priceSen: 180_000, validityDays: 90 },
+      { name: "PT 20-Pack", sessionCount: 20, priceSen: 340_000, validityDays: 180 },
+    ],
+  });
+
   const coaches = ["Adam Lim Wei Jie", "Farah Aziz", "Rajesh Kumar"];
   for (let i = 0; i < coaches.length; i++) {
     await prisma.user.create({
@@ -64,11 +78,33 @@ async function seedLiveBook() {
 }
 
 async function stageFixtures(): Promise<string> {
-  const batchId = await createBatch("legacy-booking-tool");
+  const batchId = await createBatch(SOURCE);
   await stageClients(batchId, read("clients.csv"));
   await stageBookings(batchId, read("bookings.csv"));
   await stagePackages(batchId, read("packages.csv"));
   return batchId;
+}
+
+async function aManager(): Promise<string> {
+  const passwordHash = await hashPassword("x");
+  const m = await prisma.user.create({
+    data: { email: "mgr@x", name: "Manager", passwordHash, role: Role.MANAGER },
+  });
+  return m.id;
+}
+
+// Stage the fixtures, reconcile, and commit the unambiguous outcomes.
+async function stageReconcileCommit() {
+  const batchId = await stageFixtures();
+  const report = await reconcileClients(batchId);
+  const actorUserId = await aManager();
+  const summary = await commitImport({
+    batchId,
+    sourceSystem: SOURCE,
+    report,
+    actorUserId,
+  });
+  return { batchId, report, summary };
 }
 
 // Find the bucket entry that contains a given vendor Member ID.
@@ -207,5 +243,134 @@ describe("vendor import — phase 2 booking and package integrity", () => {
     const batchId = await stageFixtures();
     const report = await reconcilePackages(batchId);
     expect(report.unknownMember.map((i) => i.sourceRowId)).toContain("V1099");
+  });
+});
+
+describe("vendor import — phase 3 commit", () => {
+  beforeEach(seedLiveBook);
+
+  it("applies exact matches and new clients, and holds probable/conflict back", async () => {
+    const { summary } = await stageReconcileCommit();
+
+    // Sarah and Ravi are the only two members with no live counterpart.
+    expect(summary.clientsCreated).toBe(2);
+
+    const sarah = await prisma.client.findFirstOrThrow({
+      where: { sourceSystem: SOURCE, sourceRowId: "V1010" },
+    });
+    expect(sarah.name).toBe("Sarah");
+
+    // The probable match (Emily) and the conflict (Lim Xin Yi / Linda Lim) are
+    // never written: the live rows keep no vendor provenance and no new row is
+    // invented for Linda.
+    const emily = await prisma.client.findFirstOrThrow({
+      where: { name: "Emily Watson" },
+    });
+    expect(emily.sourceRowId).toBeNull();
+    const linda = await prisma.client.findFirst({ where: { name: "Linda Lim" } });
+    expect(linda).toBeNull();
+  });
+
+  it("folds duplicate booking cards onto a single session", async () => {
+    await stageReconcileCommit();
+
+    const nurul = await prisma.client.findFirstOrThrow({
+      where: { name: "Nurul Ain binti Rahman" },
+    });
+    // B2001 and B2002 are the same real session under two duplicate cards; only
+    // one survives, plus the distinct B2011.
+    const sessions = await prisma.trainingSession.count({
+      where: { clientId: nurul.id },
+    });
+    expect(sessions).toBe(2);
+
+    const pkg = await prisma.clientPackage.findFirstOrThrow({
+      where: { clientId: nurul.id },
+    });
+    // 10 granted, two attended sessions deducted (not three): the vendor's
+    // double-charge is corrected.
+    expect(await getBalance(pkg.id)).toBe(8);
+  });
+
+  it("stamps every written row with its vendor provenance", async () => {
+    await stageReconcileCommit();
+
+    const packages = await prisma.clientPackage.findMany();
+    expect(packages.length).toBeGreaterThan(0);
+    for (const p of packages) {
+      expect(p.sourceSystem).toBe(SOURCE);
+      expect(p.sourceRowId).not.toBeNull();
+    }
+
+    const sessions = await prisma.trainingSession.findMany();
+    expect(sessions.length).toBeGreaterThan(0);
+    for (const s of sessions) {
+      expect(s.sourceSystem).toBe(SOURCE);
+      expect(s.sourceRowId).not.toBeNull();
+    }
+  });
+
+  it("is idempotent: importing the same export twice changes nothing", async () => {
+    await stageReconcileCommit();
+
+    const before = {
+      clients: await prisma.client.count(),
+      packages: await prisma.clientPackage.count(),
+      sessions: await prisma.trainingSession.count(),
+      ledger: await prisma.creditLedgerEntry.count(),
+    };
+
+    // A second, independent run over the identical files (a fresh batch).
+    const batchId = await stageFixtures();
+    const report = await reconcileClients(batchId);
+    const actorUserId = await prisma.user
+      .findFirstOrThrow({ where: { role: Role.MANAGER } })
+      .then((u) => u.id);
+    const summary = await commitImport({
+      batchId,
+      sourceSystem: SOURCE,
+      report,
+      actorUserId,
+    });
+
+    expect(summary.clientsCreated).toBe(0);
+    expect(summary.packagesCreated).toBe(0);
+    expect(summary.sessionsCreated).toBe(0);
+
+    expect(await prisma.client.count()).toBe(before.clients);
+    expect(await prisma.clientPackage.count()).toBe(before.packages);
+    expect(await prisma.trainingSession.count()).toBe(before.sessions);
+    expect(await prisma.creditLedgerEntry.count()).toBe(before.ledger);
+  });
+});
+
+describe("parallel check", () => {
+  beforeEach(seedLiveBook);
+
+  it("surfaces the seeded balance discrepancies with both numbers", async () => {
+    await stageReconcileCommit();
+
+    const discrepancies = await computeDiscrepancies({
+      packagesCsv: read("packages.csv"),
+      sourceSystem: SOURCE,
+    });
+    const byMember = new Map(discrepancies.map((d) => [d.memberId, d]));
+
+    // Nurul: we deduct one attended session the vendor double-charged.
+    const nurul = byMember.get("V1001");
+    expect(nurul).toBeDefined();
+    expect(nurul!.ourBalance).toBe(8);
+    expect(nurul!.theirBalance).toBe(9);
+    expect(nurul!.entries.length).toBeGreaterThan(0);
+
+    // Tan: a no-show the vendor never charged pulls our balance below theirs.
+    const tan = byMember.get("V1004");
+    expect(tan).toBeDefined();
+    expect(tan!.ourBalance).toBe(8);
+    expect(tan!.theirBalance).toBe(6);
+
+    // Packages whose computed balance agrees with the vendor are not flagged.
+    expect(byMember.has("V1005")).toBe(false);
+    expect(byMember.has("V1011")).toBe(false);
   });
 });

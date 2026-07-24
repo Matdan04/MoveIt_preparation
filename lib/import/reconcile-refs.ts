@@ -158,7 +158,17 @@ export async function reconcilePackages(
   return report;
 }
 
-type CoachWithUser = { id: string; user: { name: string } };
+export type CoachWithUser = { id: string; user: { name: string } };
+
+// Resolve a vendor coach string to a coach record, or null if nothing clears
+// the similarity bar. Exported so the commit phase resolves coaches the same
+// way the report does — one definition of "this string is that coach".
+export function matchCoach(
+  raw: string,
+  coaches: CoachWithUser[],
+): CoachWithUser | null {
+  return bestCoach(raw, coaches);
+}
 
 function bestCoach(
   raw: string,
