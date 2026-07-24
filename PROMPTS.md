@@ -39,6 +39,12 @@ Commit: `Scaffold Next.js app with Postgres and test harness.`
 > `--primary`/`--ring` in `app/globals.css`; Geist is loaded via `next/font`.
 > From Step 2 onward, every UI control is a shadcn component — add missing ones
 > with `pnpm dlx shadcn@latest add <name>`, never hand-roll raw inputs/buttons.
+> Also in the stack: `lucide-react`, `next-themes`, `sonner`.
+>
+> **`UI.md` is the interface spec** — palette, type scale, the collapsible
+> sidebar shell, the credit rail, and a layout for every page. Step 10 assumes
+> it is at the repo root next to `CLAUDE.md`. Don't build UI without it, and
+> don't restate it in prompts; point at it.
 
 ---
 
@@ -295,26 +301,160 @@ Commit: `Add three-phase vendor import with reconciliation and parallel check.`
 
 ## Step 10 — UI
 
-```
-Build the routes listed in CLAUDE.md as Server Components with Server Actions.
+Four prompts, plus two follow-ups. `UI.md` carries the detail; these prompts
+point at it rather than restating it. Do not let the whole UI be generated in
+one shot — the shell has to be right before any page is built on top of it.
 
-Constraints:
-- Every Server Action's first line calls requireActor(), then validates input
+**Paste these standing constraints into every prompt in step 10.** They are the
+reason this project exists.
+
+```
+Standing constraints for all UI work:
+- Every Server Action's FIRST line calls requireActor(), then validates input
   with Zod, then delegates to a service. No exceptions, including reads.
-- All data reads go through lib/data/* with the actor passed explicitly
-- Conditional rendering is UX only; the server checks regardless
+- All data reads go through lib/data/* with the actor passed explicitly.
+- Conditional rendering is UX only. The server authorizes regardless.
 - Never select passwordHash or another user's contact details into component
-  props, even if unused — the RSC payload is visible in the browser
-- Build the UI from shadcn/ui components (components/ui/*). Add any missing
-  primitive with `pnpm dlx shadcn@latest add <name>` rather than hand-rolling
-  raw HTML controls. Tailwind for layout, one accent colour on --primary,
-  Geist font. No other component library.
-
-Build /login, /leads, /clients/[id], /today and /manage/assignments first.
-Show me those before starting /manage/import and /manage/audit.
+  props, even if unused — the RSC payload is visible in the browser.
+- Dates are formatted on the SERVER in Asia/Kuala_Lumpur. No date formatting in
+  any client component.
+- Every control is a shadcn component from components/ui/*. Add missing ones
+  with `pnpm dlx shadcn@latest add <name>`; never hand-roll a raw input or
+  button. Page-specific composition lives beside the route, not in
+  components/ui.
+- Client components only where interactivity requires it. Push "use client" to
+  the leaf, never to a page or layout.
 ```
 
-Commit: `Add server-rendered operational screens.`
+### 10a — Foundation and design tokens
+
+```
+Read UI.md fully. Set up the design system only — no pages yet.
+
+- Install exactly the shadcn components listed in the shared components section
+  of UI.md, in one command.
+- Implement the "Chalk & Ink" palette in app/globals.css as CSS variables for
+  both light and dark, mapped onto the shadcn token names. Use the six chrome
+  values and the four status values exactly as specified.
+- Wire Geist Sans and Geist Mono via next/font. Set the type scale, 14px base,
+  and enable tabular figures on the mono face.
+- Set radius, border and spacing defaults to the density spec.
+- Configure next-themes: attribute="class", defaultTheme="system",
+  disableTransitionOnChange, suppressHydrationWarning on <html>.
+- Mount sonner once in the root layout.
+
+Then build a throwaway page at /_tokens showing the palette, the type scale,
+and every installed shadcn primitive in both themes, so I can eyeball the
+system before anything is built on it. It gets deleted at the end of step 10.
+
+Show me the token file and the /_tokens page. Build nothing else.
+```
+
+Commit: `Establish design tokens and theming.`
+
+Look at `/_tokens` in both themes before moving on. Check the status colours
+against the dark background specifically — that's where contrast fails.
+
+### 10b — App shell
+
+```
+Build the application shell per the app shell section of UI.md. Nothing inside
+the content area yet — pages render a placeholder.
+
+- shadcn sidebar block, collapsible="icon"
+- Role-filtered nav config in one file, with the comment stating that this
+  filtering is UX only and every route authorizes server-side
+- Collapse state persisted in a cookie and read on the server, so first paint
+  is correct with no layout shift. Do not use localStorage.
+- Cmd/Ctrl+B toggle
+- Sidebar footer: the three-way Light/System/Dark segmented control, then the
+  user menu with initials avatar, email, role badge, and Log out
+- Log out is a form posting to a Server Action that deletes the AuthSession row
+  and clears the cookie, then redirects to /login. Not a client-side call.
+- Header: 52px, sticky, breadcrumb left, actions slot right
+
+Then build the shared app-level components from UI.md: StatusBadge, PageHeader,
+DataTable, EmptyState, Money, Time, RoleGate. Keep each one small.
+
+Show me the shell with placeholder pages and let me click through it.
+```
+
+Commit: `Add collapsible app shell with theming and session logout.`
+
+### 10c — The credit rail
+
+Its own prompt. It is the signature element and the visual argument for the
+append-only ledger.
+
+```
+Build components/credit-rail.tsx per the signature element section of UI.md.
+
+- Ticks are derived from CreditLedgerEntry rows passed in as props. The
+  component must NOT accept a precomputed balance number — it takes the ledger
+  and renders it. That constraint is the whole point of the component.
+- Consumed, remaining, adjusted (notched, warning colour) and reversed (struck,
+  followed by a restored empty tick) all render distinctly
+- Hover/tap a tick to see the entry that caused it: session, date, actor,
+  reason. Use the shadcn tooltip and popover.
+- Warning colour on the trailing ticks under 3 remaining
+- A compact single-line variant for table rows
+- Works at 375px with a 24-credit package — decide how it degrades and tell me
+  what you chose
+
+Add a story page at /_tokens/rail rendering it against six fixture ledgers:
+full, half-used, exhausted, expired, one with a manual adjustment, and one with
+a reversal.
+```
+
+Commit: `Add the credit rail, rendering balances directly from the ledger.`
+
+This is the component you open on screen in the interview. Make it good.
+
+### 10d — Pages
+
+```
+Build the pages per the pages section of UI.md, in this order:
+/login, /today, /leads, /clients, /clients/[id], /manage/assignments.
+
+For each page build all four states from the states section: loading.tsx with a
+static skeleton matching the real layout, a written empty state, error.tsx, and
+the correct forbidden behaviour (notFound() for out-of-scope, with a comment
+explaining why it is not a 403).
+
+Copy rules: active voice, sentence case, the button verb and the toast verb
+match. No apologies in errors. No marketing language anywhere.
+
+Stop after /manage/assignments and show me. Do not start the manager screens.
+```
+
+Then, separately:
+
+```
+Build /manage/import and /manage/audit per UI.md.
+
+For the import review queue: one decision at a time, the two-column vendor vs
+existing comparison, checks only on matching fields, the confidence line stated
+in words, the sticky progress footer, the typed-COMMIT dialog, and the A/R/→
+keyboard shortcuts with visible hints.
+
+For the audit log: URL-backed filters, and the expandable before/after diff
+with unchanged keys collapsed. passwordHash must not appear at all — not
+masked, absent.
+```
+
+Finally:
+
+```
+Delete /_tokens and its rail story page. Then walk the whole UI against the
+quality floor section of UI.md and report failures without fixing:
+375px layout, focus rings, keyboard paths through sidebar/tables/sheets/queue,
+aria-labels on icon-only buttons, status conveyed by more than colour,
+prefers-reduced-motion, and contrast in both themes.
+
+Order by severity.
+```
+
+Commit: `Add operational screens with full loading, empty and error states.`
 
 ---
 
@@ -329,6 +469,8 @@ deploy. Report, without fixing anything yet:
 - Any sensitive field crossing the RSC boundary into client props
 - Any non-idempotent operation that should be idempotent
 - Any timestamp rendered in the browser's local timezone rather than MYT
+- Any "use client" boundary pushed higher than the leaf that needs it
+- Any raw HTML control where a shadcn primitive exists
 - Business logic leaked into components or actions
 - Dead code, unused models, abstractions with a single caller
 

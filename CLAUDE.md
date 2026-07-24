@@ -64,8 +64,12 @@ Do not build these. Note them in the README as conscious omissions.
   surface. Do not hand-roll a raw `<input>`/`<button>` when a shadcn component
   exists; add the component with `pnpm dlx shadcn@latest add <name>` first.
   One accent colour (the studio blue, wired to `--primary`/`--ring` in
-  `app/globals.css`), Geist via `next/font`. No other component library, and
-  never `@mui`, `antd`, or similar.
+  `app/globals.css`), Geist via `next/font`. Plus `lucide-react` for icons,
+  `next-themes` for light/dark, and `sonner` for toasts. No other component
+  library, and never `@mui`, `antd`, or similar.
+  **The full interface spec — design tokens, the collapsible app shell, the
+  signature component, and per-page layouts — lives in `UI.md`. Read it before
+  building anything visual.**
 - Tests: **Vitest** against a real Postgres test database. Cover authorization
   and the credit ledger. Skip component and E2E tests entirely.
 - Seed data: a realistic Kuala Lumpur studio — RM pricing, Malay/Chinese/Indian
@@ -219,10 +223,11 @@ run daily during a real cutover.
 /manage/audit              manager
 ```
 
-Clean and legible by leaning on shadcn/ui defaults — reach for the component
-styles and a consistent layout rather than bespoke CSS. A tidy, professional
-surface is expected, but the point is still the model underneath, not custom
-visual design.
+All routes sit inside a collapsible sidebar shell with a theme toggle and
+logout. Layouts, empty/loading/error states and design tokens for each screen
+are specified in **`UI.md`** — follow it rather than inventing a layout per
+page. Lean on shadcn/ui defaults for the primitives; spend design effort only
+on the credit rail, which is the one component the interview turns on.
 
 ## Build order
 
@@ -266,6 +271,11 @@ in plain prose, under two pages:
    condition, how long you'd run in parallel and what would make you abort.
 8. **Open questions for MOVE** — five or six specific things the demo can't
    answer. This is a strength, not a gap.
+
+Add two sentences somewhere in section 2 explaining the credit rail: the
+balance is derived from an append-only ledger, and the UI renders that ledger
+directly rather than a stored number. The invariant should be visible on
+screen, not just true in the database.
 
 No emoji, no badges.
 
