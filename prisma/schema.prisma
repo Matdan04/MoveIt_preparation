@@ -232,3 +232,87 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([actorUserId])
 }
+
+// --- Import staging -------------------------------------------------------
+// The vendor import lands here first and NEVER writes live tables during
+// parse/reconcile. Staging rows mirror the raw CSV shape verbatim, plus the
+// normalised fields the matcher derives and a per-row parseErrors list so a
+// bad row is recorded, not fatal. Phase 3 (commit) reads approved matches out
+// of here; a batch can be dropped without touching anything live.
+
+model ImportBatch {
+  id           String   @id @default(cuid())
+  sourceSystem String
+  createdAt    DateTime @default(now())
+
+  clients  StagingClient[]
+  bookings StagingBooking[]
+  packages StagingPackage[]
+
+  @@index([sourceSystem])
+}
+
+model StagingClient {
+  id          String @id @default(cuid())
+  batchId     String
+  sourceRowId String // vendor "Member ID"
+
+  // Raw columns, kept exactly as exported so a row always traces back verbatim.
+  rawName   String
+  rawPhone  String
+  rawEmail  String
+  rawJoined String
+  rawStatus String
+
+  // Derived by the parser. normalizedPhone is the primary match key (E.164);
+  // it is null when the raw phone is absent or unparseable.
+  normalizedPhone String?
+  normalizedName  String
+  email           String?
+  joinedAt        DateTime?
+  parseErrors     String[]
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@index([normalizedPhone])
+}
+
+model StagingBooking {
+  id          String @id @default(cuid())
+  batchId     String
+  sourceRowId String // vendor "Booking ID"
+
+  rawMemberId String
+  rawCoach    String
+  rawWhen     String
+  rawDuration String
+  rawAttended String
+
+  scheduledAt DateTime?
+  durationMin Int?
+  parseErrors String[]
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+}
+
+model StagingPackage {
+  id          String @id @default(cuid())
+  batchId     String
+  sourceRowId String // vendor "Member ID" — packages are keyed by member here
+
+  rawMemberId String
+  rawPackage  String
+  rawSessions String
+  rawBalance  String
+
+  sessionsPurchased Int?
+  balanceStated     Int?
+  parseErrors       String[]
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+}
