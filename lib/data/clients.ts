@@ -39,3 +39,116 @@ export async function getClientForActor(actor: Actor, clientId: string) {
     : { id: clientId, ...coachScope(actor) };
   return prisma.client.findFirst({ where });
 }
+
+// The client list, enriched for the roster table: current coach name, the
+// ledger of every active package (so the compact rail renders from rows, never
+// a stored count), and the soonest upcoming session. Scope is inherited from
+// getClientsForActor — a coach sees only their assigned clients.
+export async function getClientRosterForActor(actor: Actor) {
+  const where = canViewAllClients(actor) ? {} : coachScope(actor);
+  const now = new Date();
+  return prisma.client.findMany({
+    where,
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      assignments: {
+        where: { endedAt: null },
+        select: { coach: { select: { user: { select: { name: true } } } } },
+      },
+      clientPackages: {
+        where: { expiresAt: { gt: now } },
+        select: {
+          ledgerEntries: {
+            select: {
+              id: true,
+              delta: true,
+              reason: true,
+              trainingSessionId: true,
+              createdAt: true,
+            },
+          },
+        },
+      },
+      trainingSessions: {
+        where: { status: "SCHEDULED", scheduledAt: { gt: now } },
+        orderBy: { scheduledAt: "asc" },
+        take: 1,
+        select: { scheduledAt: true },
+      },
+    },
+  });
+}
+
+// Named selects keep every User join down to a display name — passwordHash and
+// contact columns never enter the RSC payload for a client detail render.
+const ledgerDetail = {
+  select: {
+    id: true,
+    delta: true,
+    reason: true,
+    trainingSessionId: true,
+    createdAt: true,
+    createdBy: { select: { name: true } },
+    trainingSession: { select: { status: true, scheduledAt: true } },
+  },
+} as const;
+
+// The full client detail read. Returns null (not a throw) when the client is
+// out of the actor's scope, so the page answers notFound() and never reveals
+// the client exists. Financials — packages and their ledgers — are only loaded
+// for actors who may view all clients (front desk, manager); a coach sees the
+// person, their sessions and notes, but not the credit ledger or manual
+// adjustments, matching the capability table.
+export async function getClientDetailForActor(actor: Actor, clientId: string) {
+  const scope = canViewAllClients(actor)
+    ? { id: clientId }
+    : { id: clientId, ...coachScope(actor) };
+
+  const client = await prisma.client.findFirst({
+    where: scope,
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      email: true,
+      status: true,
+      joinedAt: true,
+    },
+  });
+  if (!client) return null;
+
+  const showFinancials = canViewAllClients(actor);
+
+  const sessions = await prisma.trainingSession.findMany({
+    where: { clientId },
+    orderBy: { scheduledAt: "desc" },
+    select: {
+      id: true,
+      scheduledAt: true,
+      durationMin: true,
+      status: true,
+      coach: { select: { user: { select: { name: true } } } },
+      outcomeNote: { select: { body: true } },
+    },
+  });
+
+  const packages = showFinancials
+    ? await prisma.clientPackage.findMany({
+        where: { clientId },
+        orderBy: { expiresAt: "desc" },
+        select: {
+          id: true,
+          purchasedAt: true,
+          expiresAt: true,
+          creditsGranted: true,
+          package: { select: { name: true } },
+          ledgerEntries: ledgerDetail,
+        },
+      })
+    : [];
+
+  return { client, sessions, packages, showFinancials };
+}

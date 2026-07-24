@@ -1,3 +1,11 @@
+"use client"
+
+// The `radix-ui` monolithic package's barrel eagerly evaluates client-only
+// primitives on import, so importing `Slot` from it in a Server Component throws
+// "createContext only works in Client Components". This primitive is radix-
+// backed like avatar/separator, which are already client components here, so it
+// carries the same directive — StatusBadge and other server components render it
+// as a client reference without evaluating the barrel on the server.
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { Slot } from "radix-ui"

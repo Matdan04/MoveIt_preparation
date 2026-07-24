@@ -9,7 +9,12 @@ import { prisma } from "@/lib/db";
 
 export async function getLeadsForActor(actor: Actor) {
   assertCanAccessLeads(actor);
-  return prisma.lead.findMany({ orderBy: { createdAt: "desc" } });
+  return prisma.lead.findMany({
+    orderBy: { createdAt: "desc" },
+    // Only the owner's display name crosses the boundary — never their email or
+    // any other User column.
+    include: { owner: { select: { name: true } } },
+  });
 }
 
 export async function getLeadForActor(actor: Actor, leadId: string) {

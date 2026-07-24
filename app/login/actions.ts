@@ -36,8 +36,10 @@ export async function login(
   });
 
   // One message for unknown email, wrong password, or a disabled account —
-  // never reveal which of the three failed.
-  const invalid: LoginState = { error: "Invalid credentials." };
+  // never reveal which of the three failed, and never apologise.
+  const invalid: LoginState = {
+    error: "That email and password don't match.",
+  };
   if (!user || !user.isActive) {
     await verifyPassword(parsed.data.password, DUMMY_HASH);
     return invalid;

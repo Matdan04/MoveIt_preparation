@@ -306,6 +306,45 @@ async function applyOutcome(
   });
 }
 
+// Write (or replace) the coach's outcome note for a session. One note per
+// session — the unique constraint on trainingSessionId makes this an upsert, so
+// a coach editing their note replaces it rather than stacking rows. The coachId
+// is resolved by the caller from the session (a manager is read-only on notes;
+// only the owning coach reaches here), and recorded as the author.
+export async function saveOutcomeNote(params: {
+  sessionId: string;
+  coachId: string;
+  body: string;
+  actorUserId: string;
+}): Promise<void> {
+  const body = params.body.trim();
+  if (body.length === 0) {
+    throw new Error("An outcome note cannot be empty.");
+  }
+  await prisma.$transaction(async (tx) => {
+    const existing = await tx.outcomeNote.findUnique({
+      where: { trainingSessionId: params.sessionId },
+    });
+    const note = await tx.outcomeNote.upsert({
+      where: { trainingSessionId: params.sessionId },
+      update: { body },
+      create: {
+        trainingSessionId: params.sessionId,
+        coachId: params.coachId,
+        body,
+      },
+    });
+    await recordAudit(tx, {
+      actorUserId: params.actorUserId,
+      entityType: "OutcomeNote",
+      entityId: note.id,
+      action: existing ? "EDIT_NOTE" : "WRITE_NOTE",
+      before: existing,
+      after: note,
+    });
+  });
+}
+
 // The four named terminal transitions. Each fixes the status, so no caller ever
 // supplies one; the credit consequence follows from the ledger's rules.
 

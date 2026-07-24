@@ -49,6 +49,52 @@ export async function getTodaySessionsForActor(
   return getSessionsForActor(actor, window);
 }
 
+// The coach day view, enriched: each session carries the client name and the
+// ledger of the package backing it, so the row can render the compact credit
+// rail from rows rather than a stored count. Coach scoping still applies — the
+// window only narrows, it never widens past the actor's own sessions.
+export async function getTodayDetailForActor(
+  actor: Actor,
+  window: { from: Date; to: Date },
+  narrowCoachId?: string,
+) {
+  // A manager may narrow the view to one coach (the header select). This only
+  // narrows: for a COACH actor scopeWhere already pins coachId to their own, so
+  // a supplied id can never widen past the actor's own sessions.
+  const narrow =
+    narrowCoachId && actor.role !== Role.COACH ? { coachId: narrowCoachId } : {};
+  return prisma.trainingSession.findMany({
+    where: {
+      ...scopeWhere(actor),
+      ...narrow,
+      scheduledAt: { gte: window.from, lt: window.to },
+    },
+    orderBy: { scheduledAt: "asc" },
+    select: {
+      id: true,
+      scheduledAt: true,
+      durationMin: true,
+      status: true,
+      client: { select: { id: true, name: true } },
+      outcomeNote: { select: { body: true } },
+      clientPackage: {
+        select: {
+          expiresAt: true,
+          ledgerEntries: {
+            select: {
+              id: true,
+              delta: true,
+              reason: true,
+              trainingSessionId: true,
+              createdAt: true,
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
 // null (not a throw) for an out-of-scope session id, so the caller answers
 // notFound() without leaking that the session exists.
 export async function getSessionForActor(actor: Actor, sessionId: string) {

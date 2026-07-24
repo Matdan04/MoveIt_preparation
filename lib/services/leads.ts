@@ -32,6 +32,48 @@ const LEAD_TRANSITIONS: Record<LeadStatus, readonly LeadStatus[]> = {
   [LeadStatus.LOST]: [],
 };
 
+export type CreateLeadInput = {
+  name: string;
+  phone: string;
+  email?: string;
+  source: string;
+  ownerUserId: string;
+};
+
+// Capture a new lead at the top of the funnel. The owner is the actor who took
+// it (front desk on the counter, or a manager); status always starts at NEW —
+// there is no way to inject a lead mid-pipeline. Audited as a create.
+export async function createLead(input: CreateLeadInput): Promise<Lead> {
+  return prisma.$transaction(async (tx) => {
+    const lead = await tx.lead.create({
+      data: {
+        name: input.name,
+        phone: input.phone,
+        email: input.email || null,
+        source: input.source,
+        ownerUserId: input.ownerUserId,
+        status: LeadStatus.NEW,
+      },
+    });
+    await recordAudit(tx, {
+      actorUserId: input.ownerUserId,
+      entityType: "Lead",
+      entityId: lead.id,
+      action: "CREATE_LEAD",
+      after: lead,
+    });
+    return lead;
+  });
+}
+
+// The legal next moves from a lead's current status, for a UI that renders only
+// what the state machine allows rather than every status and letting the server
+// reject. CONVERTED is excluded — it is reached through convertLead, never a
+// bare status write — so it never appears as a plain transition option.
+export function legalLeadTransitions(from: LeadStatus): LeadStatus[] {
+  return [...LEAD_TRANSITIONS[from]];
+}
+
 // Move a lead one step along the funnel. Rejects any jump the graph does not
 // allow and names the attempted transition, so a skipped stage or a backwards
 // move fails loudly rather than silently corrupting the pipeline. CONVERTED is
