@@ -33,6 +33,13 @@ No models, no routes, no components yet. Show me the tree.
 
 Commit: `Scaffold Next.js app with Postgres and test harness.`
 
+> **UI toolkit note.** shadcn/ui is initialised in this repo (Tailwind v4,
+> `-b radix`, neutral base). Components live in `components/ui/*` and the
+> `cn` helper in `lib/utils.ts`. The studio accent colour is wired to
+> `--primary`/`--ring` in `app/globals.css`; Geist is loaded via `next/font`.
+> From Step 2 onward, every UI control is a shadcn component — add missing ones
+> with `pnpm dlx shadcn@latest add <name>`, never hand-roll raw inputs/buttons.
+
 ---
 
 ## Step 1 — Schema and seed
@@ -298,7 +305,10 @@ Constraints:
 - Conditional rendering is UX only; the server checks regardless
 - Never select passwordHash or another user's contact details into component
   props, even if unused — the RSC payload is visible in the browser
-- Tailwind, no component library, system font stack, one accent colour
+- Build the UI from shadcn/ui components (components/ui/*). Add any missing
+  primitive with `pnpm dlx shadcn@latest add <name>` rather than hand-rolling
+  raw HTML controls. Tailwind for layout, one accent colour on --primary,
+  Geist font. No other component library.
 
 Build /login, /leads, /clients/[id], /today and /manage/assignments first.
 Show me those before starting /manage/import and /manage/audit.

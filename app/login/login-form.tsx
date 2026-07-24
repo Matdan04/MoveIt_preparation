@@ -2,6 +2,9 @@
 
 import { useActionState } from "react";
 import { login, type LoginState } from "./actions";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const initial: LoginState = {};
 
@@ -9,37 +12,36 @@ export function LoginForm() {
   const [state, formAction, pending] = useActionState(login, initial);
 
   return (
-    <form action={formAction} className="mt-6 flex flex-col gap-4">
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-neutral-600">Email</span>
-        <input
+    <form action={formAction} className="flex flex-col gap-5">
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="email">Email</Label>
+        <Input
+          id="email"
           name="email"
           type="email"
           autoComplete="username"
+          placeholder="you@example.com"
           required
-          className="rounded border border-neutral-300 px-3 py-2"
         />
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-neutral-600">Password</span>
-        <input
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="password">Password</Label>
+        <Input
+          id="password"
           name="password"
           type="password"
           autoComplete="current-password"
           required
-          className="rounded border border-neutral-300 px-3 py-2"
         />
-      </label>
+      </div>
       {state.error ? (
-        <p className="text-sm text-red-600">{state.error}</p>
+        <p className="text-sm text-destructive" role="alert">
+          {state.error}
+        </p>
       ) : null}
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded bg-neutral-900 px-3 py-2 text-white disabled:opacity-60"
-      >
+      <Button type="submit" disabled={pending} className="w-full">
         {pending ? "Signing in…" : "Sign in"}
-      </button>
+      </Button>
     </form>
   );
 }

@@ -57,8 +57,15 @@ Do not build these. Note them in the README as conscious omissions.
   enough to own.
 - **Server Components + Server Actions.** No separate API layer, no client-side
   data fetching, no React Query.
-- Styling: Tailwind, no component library. System font stack, one accent
-  colour.
+- Styling: Tailwind with **shadcn/ui** for every interactive UI primitive
+  (buttons, inputs, labels, cards, tables, dialogs, etc.). shadcn is not a
+  black-box dependency — its components are generated into `components/ui/*`
+  and are ours to read and edit, so it stays consistent with owning the
+  surface. Do not hand-roll a raw `<input>`/`<button>` when a shadcn component
+  exists; add the component with `pnpm dlx shadcn@latest add <name>` first.
+  One accent colour (the studio blue, wired to `--primary`/`--ring` in
+  `app/globals.css`), Geist via `next/font`. No other component library, and
+  never `@mui`, `antd`, or similar.
 - Tests: **Vitest** against a real Postgres test database. Cover authorization
   and the credit ledger. Skip component and E2E tests entirely.
 - Seed data: a realistic Kuala Lumpur studio — RM pricing, Malay/Chinese/Indian
@@ -212,8 +219,10 @@ run daily during a real cutover.
 /manage/audit              manager
 ```
 
-Plain and legible. Do not spend time on visual design; the point is the model
-underneath.
+Clean and legible by leaning on shadcn/ui defaults — reach for the component
+styles and a consistent layout rather than bespoke CSS. A tidy, professional
+surface is expected, but the point is still the model underneath, not custom
+visual design.
 
 ## Build order
 
@@ -268,3 +277,7 @@ No emoji, no badges.
 - No clever abstractions — the reader has 35 minutes
 - Comments explain *why*, never *what*
 - Do not generate placeholder or lorem content anywhere
+- UI is composed from shadcn/ui primitives in `components/ui/*`; keep those
+  files close to the generated output so re-adding a component is not a merge
+  conflict. Page-specific composition lives beside the route, not in
+  `components/ui`.
