@@ -7,6 +7,7 @@
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -38,6 +39,17 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
+
+  /* Status scale — reserved for meaning, never decoration. Kept separate from
+     chrome so a green cell can never be confused with an indigo control. */
+  --color-positive: var(--positive);
+  --color-positive-foreground: var(--positive-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-inert: var(--inert);
+
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -47,85 +59,153 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  /* The studio's single accent colour, carried on primary actions and focus
-     rings. Everything else stays neutral so the accent reads as deliberate. */
-  --primary: oklch(0.62 0.15 250);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.62 0.15 250);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+/*
+  "Chalk & Ink" — warm paper neutrals, one cold ink accent, colour reserved for
+  state. The six chrome values (Paper/Surface/Rule/Muted ink/Ink/Primary) map
+  onto the shadcn token names below; everything else is derived from them.
+  See UI.md for the source table.
+
+  `.light` mirrors `:root` so a subtree can be pinned to light even under a
+  global dark theme — used by the /_tokens preview to show both at once.
+*/
+:root,
+.light {
+  /* Paper */
+  --background: #f7f5f2;
+  /* Surface */
+  --card: #ffffff;
+  --popover: #ffffff;
+  /* Ink */
+  --foreground: #1a1c24;
+  --card-foreground: #1a1c24;
+  --popover-foreground: #1a1c24;
+  /* Muted ink */
+  --muted-foreground: #6b6862;
+  /* A faint warm tint between Paper and Rule for hover/fill surfaces */
+  --muted: #eee9e2;
+  --accent: #eee9e2;
+  --accent-foreground: #1a1c24;
+  --secondary: #eee9e2;
+  --secondary-foreground: #1a1c24;
+  /* Primary — studio indigo, deliberately the only chrome colour */
+  --primary: #2f3ea8;
+  --primary-foreground: #ffffff;
+  /* Rule */
+  --border: #ded8cf;
+  --input: #ded8cf;
+  --ring: #2f3ea8;
+  /* Destructive chrome reuses the danger status colour */
+  --destructive: #b3402f;
+
+  /* Status scale (light) */
+  --positive: #2f7a55;
+  --positive-foreground: #ffffff;
+  --warning: #b77a16;
+  --warning-foreground: #ffffff;
+  --danger: #b3402f;
+  --danger-foreground: #ffffff;
+  --inert: #6b6862;
+
+  /* Charts unused — no dashboard — but the tokens must resolve. */
+  --chart-1: #2f3ea8;
+  --chart-2: #2f7a55;
+  --chart-3: #b77a16;
+  --chart-4: #b3402f;
+  --chart-5: #6b6862;
+
+  /* Cards 8px, controls derive to ~6px via --radius-md. */
+  --radius: 0.5rem;
+
+  /* Sidebar sits on Surface, active item carries a Primary left rule (10b). */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1a1c24;
+  --sidebar-primary: #2f3ea8;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eee9e2;
+  --sidebar-accent-foreground: #1a1c24;
+  --sidebar-border: #ded8cf;
+  --sidebar-ring: #2f3ea8;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.68 0.15 250);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.68 0.15 250);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* Paper */
+  --background: #14161f;
+  /* Surface */
+  --card: #1c1f2a;
+  --popover: #1c1f2a;
+  /* Ink */
+  --foreground: #f2f1ee;
+  --card-foreground: #f2f1ee;
+  --popover-foreground: #f2f1ee;
+  /* Muted ink */
+  --muted-foreground: #8d8f9a;
+  --muted: #232732;
+  --accent: #232732;
+  --accent-foreground: #f2f1ee;
+  --secondary: #232732;
+  --secondary-foreground: #f2f1ee;
+  /* Primary — lighter indigo for a dark ground; dark ink sits on top of it */
+  --primary: #7c8ae8;
+  --primary-foreground: #14161f;
+  /* Rule */
+  --border: #2c303d;
+  --input: #2c303d;
+  --ring: #7c8ae8;
+  --destructive: #e07a66;
+
+  /* Status scale (dark) — each lifted for contrast on the dark ground */
+  --positive: #5fb88a;
+  --positive-foreground: #14161f;
+  --warning: #dfa33e;
+  --warning-foreground: #14161f;
+  --danger: #e07a66;
+  --danger-foreground: #14161f;
+  --inert: #8d8f9a;
+
+  --chart-1: #7c8ae8;
+  --chart-2: #5fb88a;
+  --chart-3: #dfa33e;
+  --chart-4: #e07a66;
+  --chart-5: #8d8f9a;
+
+  --sidebar: #1c1f2a;
+  --sidebar-foreground: #f2f1ee;
+  --sidebar-primary: #7c8ae8;
+  --sidebar-primary-foreground: #14161f;
+  --sidebar-accent: #232732;
+  --sidebar-accent-foreground: #f2f1ee;
+  --sidebar-border: #2c303d;
+  --sidebar-ring: #7c8ae8;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
   html {
     @apply font-sans;
+    /* Dense operational tool: 14px base, not 16. */
+    font-size: 14px;
+  }
+  body {
+    @apply bg-background text-foreground;
+    line-height: 1.45;
+  }
+  /* The data face carries lining, tabular figures wherever numbers stack in a
+     column — times, credits, prices, IDs. The type signature of the app. */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+  }
+}
+
+@layer components {
+  /* Section eyebrow: 11px uppercase, wide tracking, muted ink. Labels only. */
+  .eyebrow {
+    font-size: 11px;
+    line-height: 1.2;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
   }
 }
