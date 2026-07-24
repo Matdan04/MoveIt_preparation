@@ -1,4 +1,3 @@
-// Skeleton only. Domain models are added in Step 1.
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,4 +6,229 @@ datasource db {
   // Prisma 7: no `url` here. The connection string lives in prisma.config.ts
   // for the CLI and in lib/db.ts (driver adapter) at runtime.
   provider = "postgresql"
+}
+
+enum Role {
+  FRONT_DESK
+  COACH
+  MANAGER
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  TRIAL_BOOKED
+  CONVERTED
+  LOST
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum TrainingSessionStatus {
+  SCHEDULED
+  ATTENDED
+  NO_SHOW
+  CANCELLED_BY_CLIENT
+  CANCELLED_BY_STUDIO
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  coach        Coach?
+  authSessions AuthSession[]
+  ownedLeads   Lead[]              @relation("LeadOwner")
+  ledgerWrites CreditLedgerEntry[] @relation("LedgerAuthor")
+  auditLogs    AuditLog[]          @relation("AuditActor")
+}
+
+// Named AuthSession to avoid colliding with TrainingSession (the domain
+// "session"). Opaque random id lives in the cookie; sliding expiry in Step 2.
+model AuthSession {
+  id        String   @id
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Coach {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  specialties         String[]
+  weeklyCapacityHours Int
+  active              Boolean  @default(true)
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignments      CoachAssignment[]
+  trainingSessions TrainingSession[]
+  outcomeNotes     OutcomeNote[]
+}
+
+model Lead {
+  id          String     @id @default(cuid())
+  name        String
+  phone       String
+  email       String?
+  source      String
+  status      LeadStatus @default(NEW)
+  ownerUserId String
+  createdAt   DateTime   @default(now())
+
+  owner  User    @relation("LeadOwner", fields: [ownerUserId], references: [id])
+  client Client?
+
+  @@index([ownerUserId])
+}
+
+model Client {
+  id       String       @id @default(cuid())
+  leadId   String?      @unique
+  name     String
+  phone    String
+  email    String?
+  joinedAt DateTime     @default(now())
+  status   ClientStatus @default(ACTIVE)
+
+  // Provenance for imported rows; null for natively created clients.
+  sourceSystem String?
+  sourceRowId  String?
+
+  lead             Lead?             @relation(fields: [leadId], references: [id])
+  assignments      CoachAssignment[]
+  clientPackages   ClientPackage[]
+  trainingSessions TrainingSession[]
+
+  @@unique([sourceSystem, sourceRowId])
+}
+
+model CoachAssignment {
+  id        String    @id @default(cuid())
+  clientId  String
+  coachId   String
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+  reason    String?
+
+  client Client @relation(fields: [clientId], references: [id])
+  coach  Coach  @relation(fields: [coachId], references: [id])
+
+  // At most one active assignment per client is enforced by a raw-SQL partial
+  // unique index (clientId WHERE endedAt IS NULL), added in the migration —
+  // Prisma cannot express a partial index.
+  @@index([clientId])
+  @@index([coachId])
+}
+
+model Package {
+  id           String @id @default(cuid())
+  name         String
+  sessionCount Int
+  priceSen     Int
+  validityDays Int
+
+  clientPackages ClientPackage[]
+}
+
+model ClientPackage {
+  id          String   @id @default(cuid())
+  clientId    String
+  packageId   String
+  purchasedAt DateTime @default(now())
+  expiresAt   DateTime
+  // Credits initially granted by the purchase. The live balance is NEVER stored
+  // here — it is always the sum of CreditLedgerEntry.delta rows. This field is
+  // only the opening grant recorded once at purchase time.
+  creditsGranted Int
+
+  sourceSystem String?
+  sourceRowId  String?
+
+  client           Client              @relation(fields: [clientId], references: [id])
+  package          Package             @relation(fields: [packageId], references: [id])
+  trainingSessions TrainingSession[]
+  ledgerEntries    CreditLedgerEntry[]
+
+  @@unique([sourceSystem, sourceRowId])
+  @@index([clientId])
+}
+
+model TrainingSession {
+  id              String                @id @default(cuid())
+  clientId        String
+  coachId         String
+  scheduledAt     DateTime
+  durationMin     Int
+  status          TrainingSessionStatus @default(SCHEDULED)
+  clientPackageId String?
+
+  sourceSystem String?
+  sourceRowId  String?
+
+  client        Client              @relation(fields: [clientId], references: [id])
+  coach         Coach               @relation(fields: [coachId], references: [id])
+  clientPackage ClientPackage?      @relation(fields: [clientPackageId], references: [id])
+  ledgerEntries CreditLedgerEntry[]
+  outcomeNote   OutcomeNote?
+
+  @@unique([sourceSystem, sourceRowId])
+  @@index([clientId])
+  @@index([coachId])
+  @@index([scheduledAt])
+}
+
+model CreditLedgerEntry {
+  id                String   @id @default(cuid())
+  clientPackageId   String
+  trainingSessionId String?
+  delta             Int
+  reason            String
+  createdByUserId   String
+  createdAt         DateTime @default(now())
+
+  clientPackage   ClientPackage    @relation(fields: [clientPackageId], references: [id])
+  trainingSession TrainingSession? @relation(fields: [trainingSessionId], references: [id])
+  createdBy       User             @relation("LedgerAuthor", fields: [createdByUserId], references: [id])
+
+  @@index([clientPackageId])
+  @@index([trainingSessionId])
+}
+
+model OutcomeNote {
+  id                String   @id @default(cuid())
+  trainingSessionId String   @unique
+  coachId           String
+  body              String
+  createdAt         DateTime @default(now())
+
+  trainingSession TrainingSession @relation(fields: [trainingSessionId], references: [id])
+  coach           Coach           @relation(fields: [coachId], references: [id])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String
+  entityType  String
+  entityId    String
+  action      String
+  before      Json?
+  after       Json?
+  createdAt   DateTime @default(now())
+
+  actor User @relation("AuditActor", fields: [actorUserId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([actorUserId])
 }
