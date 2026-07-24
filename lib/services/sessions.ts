@@ -15,6 +15,7 @@
 import type { Prisma, TrainingSession } from "@prisma/client";
 import { TrainingSessionStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { recordAudit } from "@/lib/services/audit";
 import { getBalance, settleSession } from "@/lib/services/credits";
 
 type Tx = Prisma.TransactionClient;
@@ -88,6 +89,7 @@ export type BookSessionInput = {
   coachId: string;
   scheduledAt: Date;
   durationMin: number;
+  actorUserId: string;
   // Optional: pin the package to charge. Omit to auto-select the soonest-expiring
   // eligible one. A supplied id is still re-validated for eligibility below.
   clientPackageId?: string;
@@ -145,7 +147,7 @@ export async function bookSession(
       }
     }
 
-    return tx.trainingSession.create({
+    const created = await tx.trainingSession.create({
       data: {
         clientId: input.clientId,
         coachId: input.coachId,
@@ -155,12 +157,21 @@ export async function bookSession(
         status: TrainingSessionStatus.SCHEDULED,
       },
     });
+    await recordAudit(tx, {
+      actorUserId: input.actorUserId,
+      entityType: "TrainingSession",
+      entityId: created.id,
+      action: "BOOK_SESSION",
+      after: created,
+    });
+    return created;
   });
 }
 
 export type RescheduleInput = {
   sessionId: string;
   scheduledAt: Date;
+  actorUserId: string;
   durationMin?: number;
 };
 
@@ -204,10 +215,21 @@ export async function rescheduleSession(
       throw new Error("The coach already has a session overlapping that slot.");
     }
 
-    return tx.trainingSession.update({
+    const updated = await tx.trainingSession.update({
       where: { id: session.id },
       data: { scheduledAt: input.scheduledAt, durationMin },
     });
+    // The before/after here is the "records the change" seam the reschedule
+    // contract calls for — the old slot and the new one, same session id.
+    await recordAudit(tx, {
+      actorUserId: input.actorUserId,
+      entityType: "TrainingSession",
+      entityId: session.id,
+      action: "RESCHEDULE_SESSION",
+      before: session,
+      after: updated,
+    });
+    return updated;
   });
 }
 
@@ -249,6 +271,18 @@ async function applyOutcome(
     const updated = await tx.trainingSession.update({
       where: { id: session.id },
       data: { status: params.status },
+    });
+
+    // One row for the outcome the actor chose. The credit movement it triggers
+    // is recorded by the ledger entry settleSession writes below, not a second
+    // audit row — the outcome and its settlement are one action.
+    await recordAudit(tx, {
+      actorUserId: params.actorUserId,
+      entityType: "TrainingSession",
+      entityId: session.id,
+      action: `OUTCOME_${params.status}`,
+      before: session,
+      after: updated,
     });
 
     // Settle credit only when a package backs the session. A studio cancellation

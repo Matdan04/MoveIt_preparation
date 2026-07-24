@@ -28,41 +28,41 @@ async function makeLead(status: LeadStatus = LeadStatus.NEW) {
 describe("lead status transitions", () => {
   it("advances a lead one step along the funnel", async () => {
     const lead = await makeLead(LeadStatus.NEW);
-    const moved = await advanceLeadStatus(lead.id, LeadStatus.CONTACTED);
+    const moved = await advanceLeadStatus(lead.id, LeadStatus.CONTACTED, lead.ownerUserId);
     expect(moved.status).toBe(LeadStatus.CONTACTED);
   });
 
   it("lets a live lead be marked LOST", async () => {
     const lead = await makeLead(LeadStatus.CONTACTED);
-    const moved = await advanceLeadStatus(lead.id, LeadStatus.LOST);
+    const moved = await advanceLeadStatus(lead.id, LeadStatus.LOST, lead.ownerUserId);
     expect(moved.status).toBe(LeadStatus.LOST);
   });
 
   it("rejects a skipped stage and names the transition", async () => {
     const lead = await makeLead(LeadStatus.NEW);
     await expect(
-      advanceLeadStatus(lead.id, LeadStatus.TRIAL_BOOKED),
+      advanceLeadStatus(lead.id, LeadStatus.TRIAL_BOOKED, lead.ownerUserId),
     ).rejects.toThrow(/NEW → TRIAL_BOOKED/);
   });
 
   it("rejects a backwards move and names the transition", async () => {
     const lead = await makeLead(LeadStatus.TRIAL_BOOKED);
     await expect(
-      advanceLeadStatus(lead.id, LeadStatus.NEW),
+      advanceLeadStatus(lead.id, LeadStatus.NEW, lead.ownerUserId),
     ).rejects.toThrow(/TRIAL_BOOKED → NEW/);
   });
 
   it("refuses to reach CONVERTED through a status write", async () => {
     const lead = await makeLead(LeadStatus.TRIAL_BOOKED);
     await expect(
-      advanceLeadStatus(lead.id, LeadStatus.CONVERTED),
+      advanceLeadStatus(lead.id, LeadStatus.CONVERTED, lead.ownerUserId),
     ).rejects.toThrow(/convertLead/);
   });
 
   it("refuses to move a terminal LOST lead", async () => {
     const lead = await makeLead(LeadStatus.LOST);
     await expect(
-      advanceLeadStatus(lead.id, LeadStatus.CONTACTED),
+      advanceLeadStatus(lead.id, LeadStatus.CONTACTED, lead.ownerUserId),
     ).rejects.toThrow(/LOST → CONTACTED/);
   });
 });
@@ -71,7 +71,7 @@ describe("lead conversion", () => {
   it("creates a linked client, carries contact details over, and marks the lead CONVERTED", async () => {
     const lead = await makeLead(LeadStatus.TRIAL_BOOKED);
 
-    const client = await convertLead(lead.id);
+    const client = await convertLead(lead.id, lead.ownerUserId);
 
     expect(client.leadId).toBe(lead.id);
     expect(client.name).toBe(lead.name);
@@ -85,8 +85,8 @@ describe("lead conversion", () => {
   it("is idempotent: converting again returns the same client, not a duplicate", async () => {
     const lead = await makeLead(LeadStatus.TRIAL_BOOKED);
 
-    const first = await convertLead(lead.id);
-    const second = await convertLead(lead.id);
+    const first = await convertLead(lead.id, lead.ownerUserId);
+    const second = await convertLead(lead.id, lead.ownerUserId);
 
     expect(second.id).toBe(first.id);
     const count = await prisma.client.count({ where: { leadId: lead.id } });
@@ -95,6 +95,6 @@ describe("lead conversion", () => {
 
   it("refuses to convert a lead that has not reached TRIAL_BOOKED", async () => {
     const lead = await makeLead(LeadStatus.NEW);
-    await expect(convertLead(lead.id)).rejects.toThrow(/NEW → CONVERTED/);
+    await expect(convertLead(lead.id, lead.ownerUserId)).rejects.toThrow(/NEW → CONVERTED/);
   });
 });

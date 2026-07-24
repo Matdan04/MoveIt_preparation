@@ -15,6 +15,7 @@
 
 import type { CreditLedgerEntry, Prisma, TrainingSessionStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { recordAudit } from "@/lib/services/audit";
 
 // A no-show or a late client cancellation charges the client if it happens
 // within this window of the scheduled start; earlier cancellations are free.
@@ -179,8 +180,8 @@ export async function adjustCredits(
   if (reason.length === 0) {
     throw new Error("A manual credit adjustment requires a non-empty reason.");
   }
-  const run = (t: Tx) =>
-    t.creditLedgerEntry.create({
+  const run = async (t: Tx) => {
+    const entry = await t.creditLedgerEntry.create({
       data: {
         clientPackageId: params.clientPackageId,
         delta: params.delta,
@@ -188,6 +189,17 @@ export async function adjustCredits(
         createdByUserId: params.actorUserId,
       },
     });
+    // A discretionary override is logged on top of its ledger row: the audit log
+    // is where a manager looks for "who moved credit by hand, and why".
+    await recordAudit(t, {
+      actorUserId: params.actorUserId,
+      entityType: "CreditLedgerEntry",
+      entityId: entry.id,
+      action: "ADJUST_CREDITS",
+      after: entry,
+    });
+    return entry;
+  };
   return tx ? run(tx) : prisma.$transaction(run);
 }
 
@@ -209,7 +221,7 @@ export async function reverseEntry(
     if (!original) {
       throw new Error("Cannot reverse a ledger entry that does not exist.");
     }
-    return t.creditLedgerEntry.create({
+    const entry = await t.creditLedgerEntry.create({
       data: {
         clientPackageId: original.clientPackageId,
         trainingSessionId: original.trainingSessionId,
@@ -218,6 +230,17 @@ export async function reverseEntry(
         createdByUserId: params.actorUserId,
       },
     });
+    // The diff points back at the row being undone, so the log reads as
+    // "reversed entry X" rather than a bare compensating delta.
+    await recordAudit(t, {
+      actorUserId: params.actorUserId,
+      entityType: "CreditLedgerEntry",
+      entityId: entry.id,
+      action: "REVERSE_CREDITS",
+      before: original,
+      after: entry,
+    });
+    return entry;
   };
   return tx ? run(tx) : prisma.$transaction(run);
 }

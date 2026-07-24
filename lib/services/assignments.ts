@@ -15,6 +15,7 @@
 
 import type { CoachAssignment, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { recordAudit } from "@/lib/services/audit";
 
 type Tx = Prisma.TransactionClient;
 
@@ -91,13 +92,27 @@ export async function assignCoach(
     // transaction opened an active assignment for the same client between our
     // read above and this write — the atomicity that keeps "one active coach"
     // true under races.
-    return tx.coachAssignment.create({
+    const created = await tx.coachAssignment.create({
       data: {
         clientId: input.clientId,
         coachId: input.coachId,
         startedAt: now,
       },
     });
+
+    // One row records the whole reassignment: `before` is the assignment we just
+    // closed (null on a client's first coach), `after` the new one — so the diff
+    // reads as "coach X → coach Y" with the reason.
+    await recordAudit(tx, {
+      actorUserId: input.actorUserId,
+      entityType: "CoachAssignment",
+      entityId: created.id,
+      action: current ? "REASSIGN" : "ASSIGN",
+      before: current ? { ...current, endedAt: now, reason: input.reason } : null,
+      after: created,
+    });
+
+    return created;
   });
 
   const capacityWarning = await computeCapacityWarning(input.coachId);

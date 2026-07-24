@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { hashPassword } from "@/lib/auth/password";
@@ -38,6 +38,22 @@ async function activeAssignments(clientId: string) {
   });
 }
 
+// A real manager to attribute the audit rows to — assignCoach now writes one,
+// and AuditLog.actorUserId is a foreign key, so the actor must exist.
+let actor: string;
+beforeEach(async () => {
+  const passwordHash = await hashPassword("x");
+  const user = await prisma.user.create({
+    data: {
+      email: `mgr-${seq++}-${crypto.randomUUID()}@x`,
+      name: "Manager",
+      passwordHash,
+      role: Role.MANAGER,
+    },
+  });
+  actor = user.id;
+});
+
 describe("coach assignment", () => {
   it("opens a first assignment with no prior history", async () => {
     const client = await makeClient();
@@ -46,7 +62,7 @@ describe("coach assignment", () => {
     const { assignment } = await assignCoach({
       clientId: client.id,
       coachId: coach.id,
-      actorUserId: "system",
+      actorUserId: actor,
     });
 
     expect(assignment.coachId).toBe(coach.id);
@@ -59,11 +75,11 @@ describe("coach assignment", () => {
     const first = await makeCoach();
     const second = await makeCoach();
 
-    await assignCoach({ clientId: client.id, coachId: first.id, actorUserId: "s" });
+    await assignCoach({ clientId: client.id, coachId: first.id, actorUserId: actor });
     await assignCoach({
       clientId: client.id,
       coachId: second.id,
-      actorUserId: "s",
+      actorUserId: actor,
       reason: "client requested a different coach",
     });
 
@@ -88,12 +104,12 @@ describe("coach assignment", () => {
     const first = await assignCoach({
       clientId: client.id,
       coachId: coach.id,
-      actorUserId: "s",
+      actorUserId: actor,
     });
     const again = await assignCoach({
       clientId: client.id,
       coachId: coach.id,
-      actorUserId: "s",
+      actorUserId: actor,
     });
 
     expect(again.assignment.id).toBe(first.assignment.id);
@@ -111,7 +127,7 @@ describe("coach assignment", () => {
     // backstop that keeps "one active coach" true even if a racing writer or a
     // bad manual write skipped the close — by forcing two open rows for one
     // client and asserting the database refuses the second.
-    await assignCoach({ clientId: client.id, coachId: a.id, actorUserId: "s" });
+    await assignCoach({ clientId: client.id, coachId: a.id, actorUserId: actor });
     await expect(
       prisma.coachAssignment.create({
         data: { clientId: client.id, coachId: b.id },
@@ -130,9 +146,9 @@ describe("coach assignment", () => {
     const t0 = new Date("2026-01-01T00:00:00Z");
     const t1 = new Date("2026-02-01T00:00:00Z");
     const t2 = new Date("2026-03-01T00:00:00Z");
-    await assignCoach({ clientId: client.id, coachId: first.id, actorUserId: "s" }, t0);
-    await assignCoach({ clientId: client.id, coachId: second.id, actorUserId: "s" }, t1);
-    await assignCoach({ clientId: client.id, coachId: third.id, actorUserId: "s" }, t2);
+    await assignCoach({ clientId: client.id, coachId: first.id, actorUserId: actor }, t0);
+    await assignCoach({ clientId: client.id, coachId: second.id, actorUserId: actor }, t1);
+    await assignCoach({ clientId: client.id, coachId: third.id, actorUserId: actor }, t2);
 
     const history = await prisma.coachAssignment.findMany({
       where: { clientId: client.id },
@@ -147,10 +163,10 @@ describe("coach assignment", () => {
     const c1 = await makeClient("One");
     const c2 = await makeClient("Two");
 
-    const under = await assignCoach({ clientId: c1.id, coachId: coach.id, actorUserId: "s" });
+    const under = await assignCoach({ clientId: c1.id, coachId: coach.id, actorUserId: actor });
     expect(under.capacityWarning).toBeNull();
 
-    const over = await assignCoach({ clientId: c2.id, coachId: coach.id, actorUserId: "s" });
+    const over = await assignCoach({ clientId: c2.id, coachId: coach.id, actorUserId: actor });
     expect(over.capacityWarning).toEqual({ weeklyCapacityHours: 1, projectedHours: 2 });
   });
 
@@ -159,7 +175,7 @@ describe("coach assignment", () => {
     const coach = await makeCoach(20, false);
 
     await expect(
-      assignCoach({ clientId: client.id, coachId: coach.id, actorUserId: "s" }),
+      assignCoach({ clientId: client.id, coachId: coach.id, actorUserId: actor }),
     ).rejects.toThrow(/inactive/);
   });
 });

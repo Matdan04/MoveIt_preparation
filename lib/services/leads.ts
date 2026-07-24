@@ -15,6 +15,7 @@
 import type { Client, Lead, Prisma } from "@prisma/client";
 import { LeadStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { recordAudit } from "@/lib/services/audit";
 
 type Tx = Prisma.TransactionClient;
 
@@ -39,6 +40,7 @@ const LEAD_TRANSITIONS: Record<LeadStatus, readonly LeadStatus[]> = {
 export async function advanceLeadStatus(
   leadId: string,
   to: LeadStatus,
+  actorUserId: string,
 ): Promise<Lead> {
   return prisma.$transaction(async (tx) => {
     const lead = await tx.lead.findUnique({ where: { id: leadId } });
@@ -55,7 +57,19 @@ export async function advanceLeadStatus(
       );
     }
 
-    return tx.lead.update({ where: { id: leadId }, data: { status: to } });
+    const updated = await tx.lead.update({
+      where: { id: leadId },
+      data: { status: to },
+    });
+    await recordAudit(tx, {
+      actorUserId,
+      entityType: "Lead",
+      entityId: leadId,
+      action: "ADVANCE_LEAD",
+      before: lead,
+      after: updated,
+    });
+    return updated;
   });
 }
 
@@ -69,7 +83,10 @@ export async function advanceLeadStatus(
 // constraint on Client is the backstop — even a racing double-convert can only
 // leave one client — but the explicit lookup makes the common case a clean
 // no-op instead of a caught unique-violation.
-export async function convertLead(leadId: string): Promise<Client> {
+export async function convertLead(
+  leadId: string,
+  actorUserId: string,
+): Promise<Client> {
   return prisma.$transaction(async (tx) => {
     const lead = await tx.lead.findUnique({ where: { id: leadId } });
     if (!lead) throw new Error("Lead not found.");
@@ -77,6 +94,7 @@ export async function convertLead(leadId: string): Promise<Client> {
     if (lead.status === LeadStatus.CONVERTED) {
       const existing = await tx.client.findUnique({ where: { leadId } });
       // A CONVERTED lead always has its client; the constraint guarantees it.
+      // No audit row on this path — nothing changed, so there is nothing to log.
       if (existing) return existing;
     }
 
@@ -86,14 +104,18 @@ export async function convertLead(leadId: string): Promise<Client> {
       );
     }
 
-    return createClientFromLead(tx, lead);
+    return createClientFromLead(tx, lead, actorUserId);
   });
 }
 
 // Create the client and mark the lead CONVERTED. Split out so the transaction
 // body above reads as intent; the two writes belong together and always run in
 // the same tx.
-async function createClientFromLead(tx: Tx, lead: Lead): Promise<Client> {
+async function createClientFromLead(
+  tx: Tx,
+  lead: Lead,
+  actorUserId: string,
+): Promise<Client> {
   const client = await tx.client.create({
     data: {
       leadId: lead.id,
@@ -105,6 +127,15 @@ async function createClientFromLead(tx: Tx, lead: Lead): Promise<Client> {
   await tx.lead.update({
     where: { id: lead.id },
     data: { status: LeadStatus.CONVERTED },
+  });
+  // The conversion is one auditable event, keyed to the new client: `before` is
+  // null (the client did not exist), `after` is the created client.
+  await recordAudit(tx, {
+    actorUserId,
+    entityType: "Client",
+    entityId: client.id,
+    action: "CONVERT_LEAD",
+    after: client,
   });
   return client;
 }

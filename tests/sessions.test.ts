@@ -75,6 +75,7 @@ describe("session booking", () => {
       coachId: f.coachId,
       scheduledAt: new Date(Date.now() + 24 * HOUR),
       durationMin: 60,
+      actorUserId: f.managerId,
     });
 
     expect(session.status).toBe(TrainingSessionStatus.SCHEDULED);
@@ -91,6 +92,7 @@ describe("session booking", () => {
         coachId: f.coachId,
         scheduledAt: new Date(Date.now() - HOUR),
         durationMin: 60,
+        actorUserId: f.managerId,
       }),
     ).rejects.toThrow(/future/);
   });
@@ -108,6 +110,7 @@ describe("session booking", () => {
         coachId: f.coachId,
         scheduledAt: new Date(Date.now() + 48 * HOUR),
         durationMin: 60,
+        actorUserId: f.managerId,
       }),
     ).rejects.toThrow(/no package/);
   });
@@ -120,6 +123,7 @@ describe("session booking", () => {
       coachId: f.coachId,
       scheduledAt: start,
       durationMin: 60,
+      actorUserId: f.managerId,
     });
 
     // Starts 30 minutes into the first hour-long session — a clash.
@@ -129,6 +133,7 @@ describe("session booking", () => {
         coachId: f.coachId,
         scheduledAt: new Date(start.getTime() + 30 * 60_000),
         durationMin: 60,
+        actorUserId: f.managerId,
       }),
     ).rejects.toThrow(/overlapping/);
   });
@@ -141,6 +146,7 @@ describe("session booking", () => {
       coachId: f.coachId,
       scheduledAt: start,
       durationMin: 60,
+      actorUserId: f.managerId,
     });
 
     const next = await bookSession({
@@ -148,6 +154,7 @@ describe("session booking", () => {
       coachId: f.coachId,
       scheduledAt: new Date(start.getTime() + 60 * 60_000),
       durationMin: 60,
+      actorUserId: f.managerId,
     });
     expect(next.status).toBe(TrainingSessionStatus.SCHEDULED);
   });
@@ -161,12 +168,14 @@ describe("session rescheduling", () => {
       coachId: f.coachId,
       scheduledAt: new Date(Date.now() + 24 * HOUR),
       durationMin: 60,
+      actorUserId: f.managerId,
     });
 
     const target = new Date(Date.now() + 48 * HOUR);
     const moved = await rescheduleSession({
       sessionId: session.id,
       scheduledAt: target,
+      actorUserId: f.managerId,
     });
 
     expect(moved.id).toBe(session.id);
@@ -180,6 +189,7 @@ describe("session rescheduling", () => {
       coachId: f.coachId,
       scheduledAt: new Date(Date.now() + 24 * HOUR),
       durationMin: 60,
+      actorUserId: f.managerId,
     });
     await markAttended({ sessionId: session.id, actorUserId: f.managerId });
 
@@ -187,6 +197,7 @@ describe("session rescheduling", () => {
       rescheduleSession({
         sessionId: session.id,
         scheduledAt: new Date(Date.now() + 72 * HOUR),
+        actorUserId: f.managerId,
       }),
     ).rejects.toThrow(/Cannot reschedule/);
   });
@@ -200,6 +211,7 @@ describe("session outcomes", () => {
       coachId: f.coachId,
       scheduledAt: new Date(Date.now() + 24 * HOUR),
       durationMin: 60,
+      actorUserId: f.managerId,
     });
 
     const marked = await markAttended({
@@ -218,6 +230,7 @@ describe("session outcomes", () => {
       coachId: f.coachId,
       scheduledAt: new Date(Date.now() + 24 * HOUR),
       durationMin: 60,
+      actorUserId: f.managerId,
     });
 
     await markAttended({ sessionId: session.id, actorUserId: f.managerId });
@@ -237,6 +250,7 @@ describe("session outcomes", () => {
       coachId: f.coachId,
       scheduledAt: new Date(Date.now() + 24 * HOUR),
       durationMin: 60,
+      actorUserId: f.managerId,
     });
     await markAttended({ sessionId: session.id, actorUserId: f.managerId });
 
@@ -253,6 +267,7 @@ describe("session outcomes", () => {
       coachId: f.coachId,
       scheduledAt: start,
       durationMin: 60,
+      actorUserId: f.managerId,
     });
     await cancelByStudio({ sessionId: first.id, actorUserId: f.managerId });
 
@@ -262,6 +277,7 @@ describe("session outcomes", () => {
       coachId: f.coachId,
       scheduledAt: start,
       durationMin: 60,
+      actorUserId: f.managerId,
     });
     expect(replacement.status).toBe(TrainingSessionStatus.SCHEDULED);
     // Studio cancellation charges nothing.
