@@ -12,12 +12,17 @@ import {
   assertCanManageAssignments,
   assertCanAdjustCredits,
   assertCanRunImport,
+  assertCanManageCoaches,
 } from "@/lib/auth/authz";
 import { getClientsForActor, getClientForActor } from "@/lib/data/clients";
 import { getLeadsForActor, getLeadForActor } from "@/lib/data/leads";
 import { getSessionsForActor, getSessionForActor } from "@/lib/data/sessions";
 import { getAssignmentHistoryForActor } from "@/lib/data/assignments";
 import { getAuditLogForActor } from "@/lib/data/audit";
+import {
+  getCoachesForManagement,
+  getCoachDetailForActor,
+} from "@/lib/data/coaches";
 
 // This suite is the project's primary security artifact. Every case models an
 // attacker calling a data function or a policy assertion DIRECTLY with a forged
@@ -392,6 +397,66 @@ describe("Run import — manager only", () => {
   it("allows a manager to run the import", async () => {
     const f = await setup();
     expect(() => assertCanRunImport(f.managerActor)).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe("Manage coaches — manager only", () => {
+  it("denies front desk listing the coach roster", async () => {
+    const f = await setup();
+    await expect(getCoachesForManagement(f.frontDeskActor)).rejects.toThrow(
+      ForbiddenError,
+    );
+  });
+
+  it("denies a coach listing the coach roster", async () => {
+    const f = await setup();
+    await expect(getCoachesForManagement(f.coachAActor)).rejects.toThrow(
+      ForbiddenError,
+    );
+  });
+
+  it("allows a manager to list the coach roster", async () => {
+    const f = await setup();
+    expect(await getCoachesForManagement(f.managerActor)).toHaveLength(2);
+  });
+
+  it("denies front desk and a coach the manage-coaches capability", async () => {
+    const f = await setup();
+    expect(() => assertCanManageCoaches(f.frontDeskActor)).toThrow(ForbiddenError);
+    expect(() => assertCanManageCoaches(f.coachAActor)).toThrow(ForbiddenError);
+    expect(() => assertCanManageCoaches(f.managerActor)).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe("Coach profile — manager any, coach own only", () => {
+  it("gives a coach null (not an error) for another coach's profile, leaking nothing", async () => {
+    const f = await setup();
+    expect(await getCoachDetailForActor(f.coachAActor, f.coachB.id)).toBeNull();
+  });
+
+  it("lets a coach read their own profile", async () => {
+    const f = await setup();
+    const detail = await getCoachDetailForActor(f.coachAActor, f.coachA.id);
+    expect(detail?.coach.id).toBe(f.coachA.id);
+  });
+
+  it("lets a manager read any coach's profile", async () => {
+    const f = await setup();
+    const detail = await getCoachDetailForActor(f.managerActor, f.coachB.id);
+    expect(detail?.coach.id).toBe(f.coachB.id);
+  });
+
+  it("gives front desk null for a coach profile — no leaking existence", async () => {
+    const f = await setup();
+    expect(await getCoachDetailForActor(f.frontDeskActor, f.coachA.id)).toBeNull();
+  });
+
+  it("never selects passwordHash into the coach profile payload", async () => {
+    const f = await setup();
+    const detail = await getCoachDetailForActor(f.managerActor, f.coachA.id);
+    expect(detail?.coach.user).not.toHaveProperty("passwordHash");
   });
 });
 

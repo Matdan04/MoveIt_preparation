@@ -7,7 +7,7 @@
 
 const KL = "Asia/Kuala_Lumpur";
 
-type Preset = "date" | "time" | "datetime" | "weekday";
+type Preset = "date" | "time" | "datetime" | "weekday" | "fullDate";
 
 const presets: Record<Preset, Intl.DateTimeFormatOptions> = {
   date: { day: "2-digit", month: "short", year: "numeric" },
@@ -21,6 +21,8 @@ const presets: Record<Preset, Intl.DateTimeFormatOptions> = {
     hour12: false,
   },
   weekday: { weekday: "short", day: "2-digit", month: "short" },
+  // The day-view heading: "Saturday, 25 July 2026".
+  fullDate: { weekday: "long", day: "numeric", month: "long", year: "numeric" },
 };
 
 export function formatKL(value: Date | string, preset: Preset = "datetime"): string {
@@ -54,5 +56,39 @@ export function klDayWindow(dayStartUtc: Date): { from: Date; to: Date } {
   local.setUTCHours(0, 0, 0, 0);
   const from = new Date(local.getTime() - KL_OFFSET_MS);
   const to = new Date(from.getTime() + 24 * 60 * 60 * 1000);
+  return { from, to };
+}
+
+// The KL calendar day an instant falls on, as an ISO "YYYY-MM-DD" key. Used to
+// bucket sessions into month-grid cells and to name the selected day in the
+// URL — a stable, timezone-correct identifier that never depends on the
+// viewer's own clock. en-CA yields exactly the ISO ordering.
+export function klDateKey(value: Date | string): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: KL,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+// The UTC window for one KL day named by its ISO key ("2026-07-25"). Parsing the
+// key as UTC midnight and subtracting the fixed offset lands on the real instant
+// KL wall-clock midnight began — the same boundary klDayWindow computes.
+export function klDayWindowForKey(key: string): { from: Date; to: Date } {
+  const from = new Date(Date.parse(`${key}T00:00:00Z`) - KL_OFFSET_MS);
+  const to = new Date(from.getTime() + 24 * 60 * 60 * 1000);
+  return { from, to };
+}
+
+// The UTC window spanning one KL calendar month, first day 00:00 to the first of
+// the next month. monthIndex is 0-based (January = 0), matching Date.UTC.
+export function klMonthWindow(
+  year: number,
+  monthIndex: number,
+): { from: Date; to: Date } {
+  const from = new Date(Date.UTC(year, monthIndex, 1) - KL_OFFSET_MS);
+  const to = new Date(Date.UTC(year, monthIndex + 1, 1) - KL_OFFSET_MS);
   return { from, to };
 }

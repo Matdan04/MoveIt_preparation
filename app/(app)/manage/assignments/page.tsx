@@ -35,8 +35,8 @@ export default async function AssignmentsPage({
   return (
     <>
       <PageHeader
-        title="Coaches"
-        description="Assignments and capacity across the team. Capacity warns, it never blocks."
+        title="Assignments"
+        description="Client assignments and capacity across the team. Capacity warns, it never blocks."
       />
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,20rem)_1fr]">

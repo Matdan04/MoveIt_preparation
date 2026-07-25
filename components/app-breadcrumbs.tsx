@@ -16,8 +16,10 @@ const LABELS: Record<string, string> = {
   today: "Today",
   leads: "Leads",
   clients: "Clients",
+  coaches: "Coaches",
+  profile: "My profile",
   manage: "Manage",
-  assignments: "Coaches",
+  assignments: "Assignments",
   import: "Import",
   audit: "Audit",
 };
@@ -33,15 +35,16 @@ export function AppBreadcrumbs() {
   const pathname = usePathname();
   const segments = pathname.split("/").filter(Boolean);
 
-  // "manage" is a grouping segment with no page of its own — show it as inert
-  // text rather than a link that 404s.
+  // Grouping segments with no page of their own ("manage", and "coaches" which
+  // only has a detail route) render as inert text rather than a link that 404s.
+  const nonLinkable = new Set(["manage", "coaches"]);
   const crumbs = segments.map((segment, i) => {
     const href = "/" + segments.slice(0, i + 1).join("/");
     return {
       label: labelFor(segment),
       href,
       isLast: i === segments.length - 1,
-      linkable: segment !== "manage",
+      linkable: !nonLinkable.has(segment),
     };
   });
 

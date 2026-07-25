@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { User } from "lucide-react";
 import { toast } from "sonner";
 import type { TrainingSessionStatus } from "@prisma/client";
 import { CreditRail, type RailEntry } from "@/components/credit-rail";
@@ -29,6 +30,7 @@ import {
 export type SessionRowData = {
   id: string;
   clientName: string;
+  coachName: string;
   timeLabel: string;
   durationMin: number;
   status: TrainingSessionStatus;
@@ -41,7 +43,15 @@ export type SessionRowData = {
   within12h: boolean;
 };
 
-export function SessionRow({ session }: { session: SessionRowData }) {
+export function SessionRow({
+  session,
+  showCoach = false,
+}: {
+  session: SessionRowData;
+  // Managers view every coach's day, so the assigned coach is worth naming; a
+  // coach viewing their own day would only see their own name repeated.
+  showCoach?: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [note, setNote] = React.useState(session.note ?? "");
@@ -87,17 +97,28 @@ export function SessionRow({ session }: { session: SessionRowData }) {
         <button
           type="button"
           className={cn(
-            "flex w-full items-center gap-3 rounded-lg border bg-card p-3 text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            "flex w-full items-center gap-3 rounded-lg border bg-card p-3.5 text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
             session.owesMark && "border-l-2 border-l-warning",
           )}
         >
-          <span className="w-12 shrink-0 font-mono text-base tabular-nums">
-            {session.timeLabel}
-          </span>
-          <span className="min-w-0 flex-1 space-y-1">
+          <span className="min-w-0 flex-1 space-y-1.5">
             <span className="block truncate font-medium">{session.clientName}</span>
+            {showCoach ? (
+              <span className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-primary/20 bg-primary/5 px-1.5 py-0.5 text-xs text-primary">
+                <User className="size-3 shrink-0" strokeWidth={2} aria-hidden />
+                <span className="text-[10px] font-semibold uppercase tracking-[0.12em]">
+                  Coach
+                </span>
+                <span className="truncate font-medium">{session.coachName}</span>
+              </span>
+            ) : null}
             {session.railEntries.length > 0 ? (
               <CreditRail entries={session.railEntries} variant="compact" />
+            ) : null}
+            {session.note ? (
+              <span className="block truncate text-xs text-muted-foreground">
+                {session.note}
+              </span>
             ) : null}
           </span>
           <StatusBadge status={session.status} />
@@ -109,7 +130,7 @@ export function SessionRow({ session }: { session: SessionRowData }) {
           <DialogTitle>{session.clientName}</DialogTitle>
           <DialogDescription>
             <span className="font-mono tabular-nums">{session.timeLabel}</span> ·{" "}
-            {session.durationMin} min
+            {session.durationMin} min{showCoach ? ` · ${session.coachName}` : ""}
           </DialogDescription>
         </DialogHeader>
 

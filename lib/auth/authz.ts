@@ -61,6 +61,18 @@ export const canAdjustCredits = (a: Actor): boolean => isManager(a);
 export const canViewAudit = (a: Actor): boolean => isManager(a);
 export const canRunImport = (a: Actor): boolean => isManager(a);
 
+// The coach roster itself (add / edit / deactivate / delete a coach) is a
+// staffing decision, so manager-only — the same gate as assignments.
+export const canManageCoaches = (a: Actor): boolean => isManager(a);
+
+// Who may open a coach's own profile page: a manager sees any coach; a coach
+// sees only their own record. Front desk has no business on the staffing side,
+// so they see none. As with clients, an out-of-scope read resolves to null at
+// the data layer (→ notFound) rather than throwing, so the coach's existence
+// never leaks to another coach.
+export const canViewCoachProfile = (a: Actor, coachId: string): boolean =>
+  isManager(a) || coachOwns(a, coachId);
+
 // --- Assertions (throw ForbiddenError, for the server boundary) -----------
 // A service or data function calls the matching assertion before it acts.
 
@@ -90,4 +102,7 @@ export function assertCanViewAudit(a: Actor): void {
 }
 export function assertCanRunImport(a: Actor): void {
   if (!canRunImport(a)) throw new ForbiddenError();
+}
+export function assertCanManageCoaches(a: Actor): void {
+  if (!canManageCoaches(a)) throw new ForbiddenError();
 }

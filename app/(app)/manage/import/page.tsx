@@ -13,7 +13,7 @@ export default async function ImportPage() {
       />
       <EmptyState
         icon={FileInput}
-        title="The import review queue arrives in step 10d"
+        title="The import review queue arrives in later releases"
         description="This screen will walk the reconciliation report one decision at a time before commit."
       />
     </>
